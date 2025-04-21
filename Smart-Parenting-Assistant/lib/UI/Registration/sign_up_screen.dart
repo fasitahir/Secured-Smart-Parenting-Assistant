@@ -69,10 +69,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
       _isLoading = false;
     });
 
-    if (response.statusCode == 201) {
-      final responseData = jsonDecode(response.body);
-      final email = responseData['email'];
-
+    if (response.statusCode == 200) {
       Navigator.push(
         context,
         MaterialPageRoute(

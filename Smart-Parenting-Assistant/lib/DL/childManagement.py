@@ -1,58 +1,60 @@
-# childManagement.py
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from pymongo import MongoClient
 from bson import ObjectId
 from typing import List
-import os
 from datetime import datetime
 from fastapi.responses import JSONResponse
+from lib.encryption_utils import encrypt_field, decrypt_field
 
 # MongoDB Connection
 client = MongoClient("mongodb://localhost:27017/")
 db = client.smart_parenting
 children_collection = db.children
 growth_collection = db.growth_data
-# Create an APIRouter instance for child management
+
 router = APIRouter()
 
-# Pydantic Model for a Child
+# Pydantic Model
 class ChildModel(BaseModel):
     name: str = Field(..., min_length=2, max_length=50)
     date_of_birth: str = Field(..., pattern=r"\d{4}-\d{2}-\d{2}")
     gender: str = Field(..., pattern=r"^(Male|Female|Other)$")
-    allergies: str = Field(..., description="Most occurring allergies in babies.")
-    weight: float = Field(..., ge=1, description="Weight in kg")
-    height: float = Field(..., ge=0.5, description="Height in ft")
-    parentId: str = Field(..., description="Parent ID")
+    allergies: str
+    weight: float = Field(..., ge=1)
+    height: float = Field(..., ge=0.5)
+    parentId: str
 
-# MongoDB helper for converting ObjectId
+# Serializer
 def child_serializer(child) -> dict:
     return {
         "id": str(child["_id"]),
-        "name": child["name"],
-        "date_of_birth": child["date_of_birth"],
-        "gender": child["gender"],
-        "allergies": child["allergies"],
-        "weight": child["weight"],
-        "height": child["height"],
+        "name": decrypt_field(child["name"]),
+        "date_of_birth": decrypt_field(child["date_of_birth"]),
+        "gender": decrypt_field(child["gender"]),
+        "allergies": decrypt_field(child["allergies"]),
+        "weight": float(decrypt_field(child["weight"])),
+        "height": float(decrypt_field(child["height"])),
         "parentId": child["parentId"]
     }
 
-# Routes
 @router.post("/", response_model=dict)
 async def add_child(child: ChildModel):
-    print(f"Adding child: {child.dict()}")
-    result = children_collection.insert_one(child.dict())
+    try:
+        encrypted_data = {
+            "name": encrypt_field(child.name),
+            "date_of_birth": encrypt_field(child.date_of_birth),
+            "gender": encrypt_field(child.gender),
+            "allergies": encrypt_field(child.allergies),
+            "weight": encrypt_field(str(child.weight)),
+            "height": encrypt_field(str(child.height)),
+            "parentId": child.parentId
+        }
+        print(child.parentId)
 
-    print(f"Insert result: {result.inserted_id}")
-    if result is not None:
-        try:
-            print("Adding child initial growth data")
-            if not result.acknowledged:
-                raise HTTPException(status_code=500, detail="Failed to add child")
+        result = children_collection.insert_one(encrypted_data)
 
-            # Add initial growth data for the child
+        if result.acknowledged:
             growth_data = {
                 "child_id": str(result.inserted_id),
                 "date": datetime.utcnow(),
@@ -61,16 +63,11 @@ async def add_child(child: ChildModel):
                 "milestone": "Initial Data"
             }
             growth_collection.insert_one(growth_data)
-
-            response_data =  {"message": "Child added successfully"}
-            return JSONResponse(response_data, status_code=201)
-        except Exception as e:
-            print(f"Error adding child: {e}")
-            raise HTTPException(status_code=500, detail="Internal Server Error")
-
-
-    return {"message": "Child added successfully!", "id": str(result.inserted_id)}
-
+            return JSONResponse({"message": "Child added successfully"}, status_code=201)
+        else:
+            raise HTTPException(status_code=500, detail="Failed to add child")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/", response_model=List[dict])
 async def get_children_by_parent(parentId: str):
@@ -89,21 +86,36 @@ async def get_child_by_id(child_id: str):
 
 @router.put("/{child_id}", response_model=dict)
 async def update_child(child_id: str, updated_child: ChildModel):
-    result = children_collection.update_one(
-        {"_id": ObjectId(child_id)}, {"$set": updated_child.dict()}
-    )
-    growth_collection.find_one_and_update(
-        {"child_id": child_id}, {"$set": {"weight": updated_child.weight, "height": updated_child.height}},
-        sort = [("date", -1)]
-    )
+    try:
+        encrypted_update = {
+            "name": encrypt_field(updated_child.name),
+            "date_of_birth": encrypt_field(updated_child.date_of_birth),
+            "gender": encrypt_field(updated_child.gender),
+            "allergies": encrypt_field(updated_child.allergies),
+            "weight": encrypt_field(str(updated_child.weight)),
+            "height": encrypt_field(str(updated_child.height)),
+            "parentId": updated_child.parentId
+        }
 
-    if result.matched_count == 0:
-        raise HTTPException(status_code=404, detail="Child not found")
-    return {"message": "Child updated successfully"}
+        result = children_collection.update_one(
+            {"_id": ObjectId(child_id)},
+            {"$set": encrypted_update}
+        )
+
+        growth_collection.find_one_and_update(
+            {"child_id": child_id},
+            {"$set": {"weight": updated_child.weight, "height": updated_child.height}},
+            sort=[("date", -1)]
+        )
+
+        if result.matched_count == 0:
+            raise HTTPException(status_code=404, detail="Child not found")
+        return {"message": "Child updated successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.delete("/{child_id}", response_model=dict)
 async def delete_child(child_id: str):
-    print(f"Deleting child with ID: {child_id}")
     result = children_collection.delete_one({"_id": ObjectId(child_id)})
     growth_collection.delete_many({"child_id": child_id})
     if result.deleted_count == 0:

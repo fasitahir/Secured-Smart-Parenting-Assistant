@@ -20,7 +20,7 @@ app = FastAPI()
 # Middleware setup (similar to CORS in Flask)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Adjust to your needs
+    allow_origins=["*", "http://localhost:54240"],  # Adjust to your needs
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -41,4 +41,8 @@ async def health_check():
 # Run the app (only when this file is executed directly)
 if __name__ == '__main__':
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv('PORT', 8000)))
+    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv('PORT', 8000)),
+                        ssl_keyfile="certs/key.pem",
+                        ssl_certfile="certs/cert.pem",
+                        reload=True
+                        )

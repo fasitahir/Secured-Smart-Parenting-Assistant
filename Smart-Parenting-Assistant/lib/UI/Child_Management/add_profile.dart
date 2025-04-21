@@ -85,21 +85,6 @@ class _AddChildPageState extends State<AddChildPage> {
       }),
     );
 
-    // final response2 = await http.post(
-    //   Uri.parse('http://127.0.0.1:8000/growth/initial'),
-    //   headers: {"Content-Type": "application/json"},
-    //   body: jsonEncode({
-    //     "child_id": jsonDecode(response.body)['id'],
-    //     "date": DateTime.now(),
-    //     "weight": weight,
-    //     "height": height,
-    //     "milestones": [],
-    //   }),
-    // );
-
-    // if (kDebugMode) {
-    //   print("Adding Initial Growth:  $response2.statusCode");
-    // }
     if (response.statusCode == 201) {
       if (kDebugMode) {
         print("Child added successfully");

@@ -47,7 +47,13 @@ async def signup_request(user: User):
         {"$set": {"password": password_hash.decode()}},
         upsert=True
     )
-    return {"message": "OTP sent to your email. Please verify to complete signup."}
+    return JSONResponse(
+        status_code=200,
+        content={
+            "message": "OTP sent to your email. Please verify to complete signup.",
+            "email": user.email
+        }
+    )
 
 @router.post("/signup-verify")
 async def signup_verify(verify: OTPVerification):

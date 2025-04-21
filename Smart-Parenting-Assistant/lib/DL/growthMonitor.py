@@ -11,6 +11,7 @@ from fastapi import APIRouter, HTTPException
 import os
 from dateutil.relativedelta import relativedelta
 import pandas as pd
+from lib.encryption_utils import decrypt_field
 
 
 # MongoDB Setup
@@ -78,8 +79,6 @@ async def add_growth(data: GrowthData):
     response_data = {"message": "Growth data added successfully"}
     return JSONResponse(response_data, status_code=201)
 
-
-
 @router.get("/growth-detection")
 async def detect_growth(child_id: str):
     try:
@@ -89,39 +88,67 @@ async def detect_growth(child_id: str):
         if child_data is None:
             raise HTTPException(status_code=404, detail="Child not found or no data available")
 
-        # Extract relevant features
-        height = child_data.get("height")
+        # Decrypt relevant fields
+        name = decrypt_field(child_data.get("name"))
+        gender = decrypt_field(child_data.get("gender"))
+        dob = decrypt_field(child_data.get("date_of_birth"))
+        allergies = decrypt_field(child_data.get("allergies"))
+
+        # Print decrypted fields to ensure correctness
+        print(f"Decrypted Name: {name}, Gender: {gender}, DOB: {dob}, Allergies: {allergies}")
+
+        # Height and weight should be treated as numbers directly
+        try:
+            height = float(child_data.get("height", 0))  # Default to 0 if height is missing
+            weight = float(child_data.get("weight", 0))  # Default to 0 if weight is missing
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid height or weight data")
+
+        print(f"Height: {height}, Weight: {weight}")
+
+        # Convert height from feet to centimeters
         height = height * 30.48  # Convert height from feet to centimeters
-        gender = child_data.get("gender")
-        dob = child_data.get("date_of_birth")
-        dob = dob.split("T")[0]  # Extracts just "2024-05-24"
-        dob = datetime.strptime(dob, "%Y-%m-%d")
+
+        # Decrypt date_of_birth and convert it to datetime
+        if dob:
+            dob = dob.split("T")[0]  # Extracts just "2024-05-24" if it's in ISO format
+            dob = datetime.strptime(dob, "%Y-%m-%d")
+        else:
+            raise HTTPException(status_code=400, detail="Missing or invalid date of birth")
+
+        # Get current date
         current_date = datetime.now()
 
         # Calculate age in years and months
         age_years = relativedelta(current_date, dob).years
         age_months = relativedelta(current_date, dob).months
-
         age = age_years * 12 + age_months
         
-        if not (height and gender and age):
+        print(f"Age: {age} months")
+
+        # Check if required features are available
+        if not (height and gender):
             raise HTTPException(status_code=400, detail="Missing required features (height, gender, age)")
 
         # Encode and preprocess input features
-
+        gender_male = 0
+        gender_female = 0
         if gender.lower() == "male":
             gender_male = 1
             gender_female = 0
-        if gender.lower() == "female":
+        elif gender.lower() == "female":
             gender_female = 1
             gender_male = 0
 
+        # Prepare data for prediction
         df = pd.DataFrame({
             "Age (months)": [age],
             "Height (cm)": [height],
             "Gender_female": [gender_female],
             "Gender_male": [gender_male]
         })
+
+        # Set paths for model and label encoder
         root_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
         store_path = os.path.join(root_dir, 'lib', 'Model')
 
@@ -139,14 +166,17 @@ async def detect_growth(child_id: str):
         # Make prediction
         prediction = loaded_model.predict(df)
         nutrition_status = loaded_label_encoder.inverse_transform(prediction)[0]
-        print(f"Nutrition Status: {nutrition_status}")
-        data = {"child_id": str(child_data["_id"]),
-            "name": child_data.get("name"),
+
+        # Prepare the response data
+        data = {
+            "child_id": str(child_data["_id"]),
+            "name": name,  # Decrypted name
             "age": age,
             "height": height,
             "gender": gender,
-            "nutrition_status": nutrition_status,}
-        # Add prediction to the response
+            "nutrition_status": nutrition_status,
+        }
+
         response_data = {
             "data": data
         }
@@ -156,28 +186,6 @@ async def detect_growth(child_id: str):
     except Exception as e:
         print(f"Error during growth detection: {e}")
         raise HTTPException(status_code=500, detail="Internal Server Error")
-
-
-
-#     print("Detecting growth for child: ")
-#     try:
-#         childData = children_collection.find_one(
-#             {"_id": child_id}
-#         )
-#     except Exception as e:
-#         print(e)
-
-#     if childData is None:
-#         raise HTTPException(status_code=404, detail="Child not found or no data available")
-    
-#     childData["_id"] = str(childData["_id"])
-#     childData["date"] = childData["date"].isoformat()
-    
-
-#     response_data = {"data": childData}
-#     return JSONResponse(response_data, status_code=200)
-
-
 
 @router.get("/growth/getGrowthData/{child_id}")
 async def get_growth_data(child_id: str):
