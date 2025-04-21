@@ -324,7 +324,7 @@ class _NutritionAssistPageState extends State<NutritionAssistPage> {
     String? parentId = prefs.getString('userId');
 
     final response = await http.get(
-      Uri.parse('http://127.0.0.1:8000/children/?parentId=$parentId'),
+      Uri.parse('https://127.0.0.1:8000/children/?parentId=$parentId'),
       headers: {"Content-Type": "application/json"},
     );
 
@@ -361,7 +361,7 @@ class _NutritionAssistPageState extends State<NutritionAssistPage> {
 
     try {
       final response = await http.post(
-        Uri.parse('http://127.0.0.1:8000/nutrition/'),
+        Uri.parse('https://127.0.0.1:8000/nutrition/'),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({
           "date_of_birth": selectedChild['date_of_birth'],
@@ -535,7 +535,7 @@ class _NutritionAssistPageState extends State<NutritionAssistPage> {
     });
 
     final response = await http.post(
-      Uri.parse('http://127.0.0.1:8000/nutrition/follow-up/'),
+      Uri.parse('https://127.0.0.1:8000/nutrition/follow-up/'),
       headers: {"Content-Type": "application/json"},
       body: jsonEncode({"question": question}),
     );

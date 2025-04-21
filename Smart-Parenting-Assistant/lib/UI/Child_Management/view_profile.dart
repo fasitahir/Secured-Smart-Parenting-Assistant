@@ -23,7 +23,7 @@ class _ViewChildrenPageState extends State<ViewChildrenPage> {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     String? parentId = prefs.getString('userId');
     final response = await http.get(
-      Uri.parse('http://127.0.0.1:8000/children/?parentId=$parentId'),
+      Uri.parse('https://127.0.0.1:8000/children/?parentId=$parentId'),
       headers: {"Content-Type": "application/json"},
     );
 

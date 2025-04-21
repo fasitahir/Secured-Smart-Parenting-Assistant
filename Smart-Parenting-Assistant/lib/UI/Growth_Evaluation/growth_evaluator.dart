@@ -33,7 +33,7 @@ class _GrowthDetectionPageState extends State<GrowthDetectionPage> {
 
     try {
       final response = await http.get(
-        Uri.parse('http://127.0.0.1:8000/children/?parentId=$parentId'),
+        Uri.parse('https://127.0.0.1:8000/children/?parentId=$parentId'),
         headers: {"Content-Type": "application/json"},
       );
 
@@ -64,7 +64,7 @@ class _GrowthDetectionPageState extends State<GrowthDetectionPage> {
 
     try {
       final response = await http.get(
-        Uri.parse('http://127.0.0.1:8000/growth-detection/?child_id=$childId'),
+        Uri.parse('https://127.0.0.1:8000/growth-detection/?child_id=$childId'),
         headers: {"Content-Type": "application/json"},
       );
 

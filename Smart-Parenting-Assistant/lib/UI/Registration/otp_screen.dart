@@ -26,8 +26,8 @@ class _OtpScreenState extends State<OtpScreen> {
     });
 
     final String url = widget.isSignUp
-        ? "http://127.0.0.1:8000/signup-verify"
-        : "http://127.0.0.1:8000/verify-otp";
+        ? "https://127.0.0.1:8000/signup-verify"
+        : "https://127.0.0.1:8000/verify-otp";
 
     final response = await http.post(
       Uri.parse(url),

@@ -237,7 +237,7 @@ class _GrowthMonitorPageState extends State<GrowthMonitorPage> {
       String? parentId = prefs.getString('userId');
 
       final response = await http.get(
-        Uri.parse('http://127.0.0.1:8000/children/?parentId=$parentId'),
+        Uri.parse('https://127.0.0.1:8000/children/?parentId=$parentId'),
         headers: {"Content-Type": "application/json"},
       );
       if (response.statusCode == 200) {
@@ -256,7 +256,7 @@ class _GrowthMonitorPageState extends State<GrowthMonitorPage> {
   }
 
   Future<void> _fetchChildDetails(String childId) async {
-    final String url = 'http://127.0.0.1:8000/children/$childId';
+    final String url = 'https://127.0.0.1:8000/children/$childId';
 
     try {
       final response = await http.get(Uri.parse(url));
@@ -283,7 +283,7 @@ class _GrowthMonitorPageState extends State<GrowthMonitorPage> {
 
     try {
       final response = await http.get(
-        Uri.parse("http://127.0.0.1:8000/growth/getGrowthData/$childId"),
+        Uri.parse("https://127.0.0.1:8000/growth/getGrowthData/$childId"),
       );
 
       if (response.statusCode == 200) {
@@ -332,7 +332,7 @@ class _GrowthMonitorPageState extends State<GrowthMonitorPage> {
 
     try {
       final response = await http.post(
-        Uri.parse("http://127.0.0.1:8000/growth/add"),
+        Uri.parse("https://127.0.0.1:8000/growth/add"),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode(data),
       );

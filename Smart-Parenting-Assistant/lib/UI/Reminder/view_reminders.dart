@@ -20,7 +20,7 @@ class _ViewRemindersPageState extends State<ViewRemindersPage> {
 
   Future<void> fetchReminders() async {
     final response =
-        await http.get(Uri.parse('http://127.0.0.1:8000/reminders'));
+        await http.get(Uri.parse('https://127.0.0.1:8000/reminders'));
     if (response.statusCode == 200) {
       setState(() {
         reminders = List<Map<String, dynamic>>.from(json.decode(response.body));
@@ -34,7 +34,7 @@ class _ViewRemindersPageState extends State<ViewRemindersPage> {
 
   Future<void> deleteReminder(String title) async {
     final response = await http.delete(
-      Uri.parse('http://127.0.0.1:8000/reminders/$title'),
+      Uri.parse('https://127.0.0.1:8000/reminders/$title'),
     );
     if (response.statusCode == 200) {
       fetchReminders(); // Refresh reminders

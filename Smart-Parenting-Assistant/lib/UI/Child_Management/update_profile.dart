@@ -24,7 +24,7 @@ class _UpdateDeleteChildPageState extends State<UpdateDeleteChildPage> {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     String? parentId = prefs.getString('userId');
     final response = await http.get(
-      Uri.parse('http://127.0.0.1:8000/children/?parentId=$parentId'),
+      Uri.parse('https://127.0.0.1:8000/children/?parentId=$parentId'),
       headers: {"Content-Type": "application/json"},
     );
 
@@ -40,7 +40,7 @@ class _UpdateDeleteChildPageState extends State<UpdateDeleteChildPage> {
   Future<void> updateChild(
       String childId, Map<String, dynamic> updatedData) async {
     final response = await http.put(
-      Uri.parse('http://127.0.0.1:8000/children/$childId/'),
+      Uri.parse('https://127.0.0.1:8000/children/$childId/'),
       headers: {"Content-Type": "application/json"},
       body: jsonEncode(updatedData),
     );
@@ -61,7 +61,7 @@ class _UpdateDeleteChildPageState extends State<UpdateDeleteChildPage> {
 
   Future<void> deleteChild(String childId) async {
     final response = await http.delete(
-      Uri.parse('http://127.0.0.1:8000/children/$childId'),
+      Uri.parse('https://127.0.0.1:8000/children/$childId'),
       headers: {"Content-Type": "application/json"},
     );
 

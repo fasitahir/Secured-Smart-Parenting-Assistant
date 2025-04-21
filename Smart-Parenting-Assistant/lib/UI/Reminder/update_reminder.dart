@@ -171,7 +171,7 @@ class _UpdateReminderPageState extends State<UpdateReminderPage> {
   // Fetch reminders from the backend
   Future<void> fetchReminders() async {
     final response =
-        await http.get(Uri.parse('http://127.0.0.1:8000/reminders'));
+        await http.get(Uri.parse('https://127.0.0.1:8000/reminders'));
     if (response.statusCode == 200) {
       setState(() {
         reminders = List<Map<String, dynamic>>.from(json.decode(response.body));
@@ -216,7 +216,7 @@ class _UpdateReminderPageState extends State<UpdateReminderPage> {
       // Send update to the backend using title in URL
       final response = await http.put(
         Uri.parse(
-            'http://127.0.0.1:8000/reminders/${_selectedReminder!["title"]}'),
+            'https://127.0.0.1:8000/reminders/${_selectedReminder!["title"]}'),
         headers: {'Content-Type': 'application/json'},
         body: json.encode(updatedReminder),
       );

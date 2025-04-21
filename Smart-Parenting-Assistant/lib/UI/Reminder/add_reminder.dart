@@ -25,7 +25,7 @@ class _AddReminderPageState extends State<AddReminderPage> {
   Future<void> addReminder(Map<String, String> reminder) async {
     try {
       final response = await http.post(
-        Uri.parse('http://127.0.0.1:8000/reminders'), // Updated URL
+        Uri.parse('https://127.0.0.1:8000/reminders'), // Updated URL
         headers: {'Content-Type': 'application/json'},
         body: json.encode(reminder),
       );
