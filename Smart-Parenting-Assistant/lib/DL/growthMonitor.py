@@ -12,6 +12,13 @@ import os
 from dateutil.relativedelta import relativedelta
 import pandas as pd
 from lib.encryption_utils import decrypt_field
+from fastapi import Request
+import hashlib
+import logging
+import os
+
+# Define the root directory of the project
+root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 # MongoDB Setup
@@ -79,68 +86,65 @@ async def add_growth(data: GrowthData):
     response_data = {"message": "Growth data added successfully"}
     return JSONResponse(response_data, status_code=201)
 
+
+
+# Add this logger setup at the top of your file
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 @router.get("/growth-detection")
-async def detect_growth(child_id: str):
+async def detect_growth(child_id: str, request: Request):
     try:
         # Fetch child data from the database
         child_data = children_collection.find_one({"_id": ObjectId(child_id)})
-
         if child_data is None:
             raise HTTPException(status_code=404, detail="Child not found or no data available")
 
-        # Decrypt relevant fields
+        # ====== Phase 1: Data Protection ======
+
+        # Basic Raw Validation (before decrypt)
+        try:
+            height_raw = float(child_data.get("height", 0))
+            if not 30 <= height_raw * 30.48 <= 150:
+                raise ValueError("Height out of valid range")
+        except ValueError:
+            logger.warning(f"[{request.client.host}] Invalid height data: {child_data.get('height')}")
+            raise HTTPException(status_code=400, detail="Invalid height value")
+
+        gender_raw = child_data.get("gender", "").lower()
+        if gender_raw not in ["male", "female"]:
+            logger.warning(f"[{request.client.host}] Invalid gender data: {gender_raw}")
+            raise HTTPException(status_code=400, detail="Invalid gender value")
+
+        if not child_data.get("date_of_birth"):
+            logger.warning(f"[{request.client.host}] Missing DOB for child_id={child_id}")
+            raise HTTPException(status_code=400, detail="Missing date of birth")
+
+        # Decrypt sensitive fields
         name = decrypt_field(child_data.get("name"))
         gender = decrypt_field(child_data.get("gender"))
         dob = decrypt_field(child_data.get("date_of_birth"))
         allergies = decrypt_field(child_data.get("allergies"))
 
-        # Print decrypted fields to ensure correctness
-        print(f"Decrypted Name: {name}, Gender: {gender}, DOB: {dob}, Allergies: {allergies}")
+        height = height_raw * 30.48  # feet to cm
+        weight = float(child_data.get("weight", 0))  # Optional use
 
-        # Height and weight should be treated as numbers directly
-        try:
-            height = float(child_data.get("height", 0))  # Default to 0 if height is missing
-            weight = float(child_data.get("weight", 0))  # Default to 0 if weight is missing
-        except ValueError:
-            raise HTTPException(status_code=400, detail="Invalid height or weight data")
-
-        print(f"Height: {height}, Weight: {weight}")
-
-        # Convert height from feet to centimeters
-        height = height * 30.48  # Convert height from feet to centimeters
-
-        # Decrypt date_of_birth and convert it to datetime
-        if dob:
-            dob = dob.split("T")[0]  # Extracts just "2024-05-24" if it's in ISO format
-            dob = datetime.strptime(dob, "%Y-%m-%d")
-        else:
-            raise HTTPException(status_code=400, detail="Missing or invalid date of birth")
-
-        # Get current date
+        # Process DOB
+        dob = dob.split("T")[0]
+        dob = datetime.strptime(dob, "%Y-%m-%d")
         current_date = datetime.now()
-
-        # Calculate age in years and months
         age_years = relativedelta(current_date, dob).years
         age_months = relativedelta(current_date, dob).months
         age = age_years * 12 + age_months
-        
-        print(f"Age: {age} months")
 
-        # Check if required features are available
-        if not (height and gender):
-            raise HTTPException(status_code=400, detail="Missing required features (height, gender, age)")
+        if not (30 <= height <= 150 and 0 <= age <= 120):
+            logger.warning(f"[{request.client.host}] Outlier detected. Age: {age}, Height: {height}")
+            raise HTTPException(status_code=400, detail="Outlier input detected")
 
-        # Encode and preprocess input features
-        gender_male = 0
-        gender_female = 0
-        if gender.lower() == "male":
-            gender_male = 1
-            gender_female = 0
-        elif gender.lower() == "female":
-            gender_female = 1
-            gender_male = 0
+        # Encode gender
+        gender_male = 1 if gender.lower() == "male" else 0
+        gender_female = 1 if gender.lower() == "female" else 0
 
-        # Prepare data for prediction
         df = pd.DataFrame({
             "Age (months)": [age],
             "Height (cm)": [height],
@@ -148,44 +152,41 @@ async def detect_growth(child_id: str):
             "Gender_male": [gender_male]
         })
 
-        # Set paths for model and label encoder
-        root_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-        store_path = os.path.join(root_dir, 'lib', 'Model')
+        # === Optional: Model Integrity Check ===
+        model_path = os.path.join(root_dir, 'lib', 'Model', 'random_forest_model.pkl')
+        expected_hash = "PUT_YOUR_MODEL_HASH_HERE"
+        actual_hash = hashlib.sha256(open(model_path, 'rb').read()).hexdigest()
+        if actual_hash != expected_hash:
+            logger.error(f"Model integrity check failed from {request.client.host}")
+            raise HTTPException(status_code=500, detail="Model integrity verification failed")
 
-        model_path = store_path + "\\random_forest_model.pkl"
-        label_encoder_path = store_path + "\\label_encoder.pkl"
-
-        # Load the saved RandomForest model
+        # Load model and encoder
         with open(model_path, "rb") as file:
             loaded_model = pickle.load(file)
-
-        # Load the saved LabelEncoder
-        with open(label_encoder_path, "rb") as file:
+        with open(os.path.join(root_dir, 'lib', 'Model', 'label_encoder.pkl'), "rb") as file:
             loaded_label_encoder = pickle.load(file)
 
-        # Make prediction
         prediction = loaded_model.predict(df)
         nutrition_status = loaded_label_encoder.inverse_transform(prediction)[0]
 
-        # Prepare the response data
-        data = {
-            "child_id": str(child_data["_id"]),
-            "name": name,  # Decrypted name
-            "age": age,
-            "height": height,
-            "gender": gender,
-            "nutrition_status": nutrition_status,
-        }
-
         response_data = {
-            "data": data
+            "data": {
+                "child_id": str(child_data["_id"]),
+                "name": name,
+                "age": age,
+                "height": height,
+                "gender": gender,
+                "nutrition_status": nutrition_status,
+            }
         }
 
+        logger.info(f"[{request.client.host}] Prediction success for {name}, Age: {age}, Height: {height}")
         return JSONResponse(response_data, status_code=200)
 
     except Exception as e:
-        print(f"Error during growth detection: {e}")
+        logger.exception(f"Error during growth detection for child_id={child_id}")
         raise HTTPException(status_code=500, detail="Internal Server Error")
+
 
 @router.get("/growth/getGrowthData/{child_id}")
 async def get_growth_data(child_id: str):
