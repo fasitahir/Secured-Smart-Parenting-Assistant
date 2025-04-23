@@ -61,11 +61,15 @@ class _GrowthDetectionPageState extends State<GrowthDetectionPage> {
     setState(() {
       isLoading = true;
     });
-
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    String? token = prefs.getString('accessToken');
     try {
       final response = await http.get(
         Uri.parse('https://127.0.0.1:8000/growth-detection/?child_id=$childId'),
-        headers: {"Content-Type": "application/json"},
+        headers: {
+          'Authorization': 'Bearer $token',
+          "Content-Type": "application/json"
+        },
       );
 
       if (response.statusCode == 200) {

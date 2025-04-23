@@ -16,9 +16,40 @@ from fastapi import Request
 import hashlib
 import logging
 import os
+import logging
+from fastapi import FastAPI, HTTPException, Request, Depends
+from fastapi.responses import JSONResponse
+from dotenv import load_dotenv
+from datetime import datetime
+from bson import ObjectId
+from pymongo import MongoClient
+from lib.encryption_utils import  decrypt_field
+from lib.rate_limiter import rate_limiter
+
 
 # Define the root directory of the project
 root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# Add this logger setup at the top of your file
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Load environment variables
+load_dotenv()
+
+# Setup logging
+logging.basicConfig(level=logging.INFO,
+                    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+                    handlers=[
+                        logging.FileHandler("app.log"),
+                        logging.StreamHandler()
+                    ])
+logger = logging.getLogger(__name__)
+
+# MongoDB setup (adjust your URI)
+client = MongoClient("mongodb://localhost:27017")
+db = client["child_care"]
+children_collection = db["children"]
 
 
 # MongoDB Setup
@@ -87,64 +118,70 @@ async def add_growth(data: GrowthData):
     return JSONResponse(response_data, status_code=201)
 
 
+# Helper Functions
+def generate_model_hash(model_path):
+    with open(model_path, 'rb') as f:
+        return hashlib.sha256(f.read()).hexdigest()
 
-# Add this logger setup at the top of your file
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+
+def hash_model_path(model_path):
+    return hashlib.sha256(model_path.encode()).hexdigest()
+
+
+def verify_model_integrity(model_path, expected_hash):
+    actual_hash = generate_model_hash(model_path)
+    if actual_hash != expected_hash:
+        logger.error(f"Model integrity check failed. Actual: {actual_hash}, Expected: {expected_hash}")
+        return False
+    return True
+
 
 @router.get("/growth-detection")
-async def detect_growth(child_id: str, request: Request):
+async def detect_growth(child_id: str, request: Request,  _: None = Depends(rate_limiter)):
     try:
-        # Fetch child data from the database
+        # Fetch child data from DB
         child_data = children_collection.find_one({"_id": ObjectId(child_id)})
         if child_data is None:
-            raise HTTPException(status_code=404, detail="Child not found or no data available")
+            raise HTTPException(status_code=404, detail="Child not found")
 
-        # ====== Phase 1: Data Protection ======
-
-        # Basic Raw Validation (before decrypt)
-        try:
-            height_raw = float(child_data.get("height", 0))
-            if not 30 <= height_raw * 30.48 <= 150:
-                raise ValueError("Height out of valid range")
-        except ValueError:
-            logger.warning(f"[{request.client.host}] Invalid height data: {child_data.get('height')}")
-            raise HTTPException(status_code=400, detail="Invalid height value")
-
-        gender_raw = child_data.get("gender", "").lower()
-        if gender_raw not in ["male", "female"]:
-            logger.warning(f"[{request.client.host}] Invalid gender data: {gender_raw}")
-            raise HTTPException(status_code=400, detail="Invalid gender value")
-
-        if not child_data.get("date_of_birth"):
-            logger.warning(f"[{request.client.host}] Missing DOB for child_id={child_id}")
-            raise HTTPException(status_code=400, detail="Missing date of birth")
-
-        # Decrypt sensitive fields
+        # Decrypt fields
         name = decrypt_field(child_data.get("name"))
-        gender = decrypt_field(child_data.get("gender"))
+        gender = decrypt_field(child_data.get("gender")).lower()
         dob = decrypt_field(child_data.get("date_of_birth"))
         allergies = decrypt_field(child_data.get("allergies"))
+        height_raw = float(decrypt_field(child_data.get("height", "0")))
 
-        height = height_raw * 30.48  # feet to cm
-        weight = float(child_data.get("weight", 0))  # Optional use
-
-        # Process DOB
+        # Parse and calculate age
         dob = dob.split("T")[0]
         dob = datetime.strptime(dob, "%Y-%m-%d")
         current_date = datetime.now()
-        age_years = relativedelta(current_date, dob).years
-        age_months = relativedelta(current_date, dob).months
-        age = age_years * 12 + age_months
+        age_delta = relativedelta(current_date, dob)
+        age = age_delta.years * 12 + age_delta.months
 
-        if not (30 <= height <= 150 and 0 <= age <= 120):
-            logger.warning(f"[{request.client.host}] Outlier detected. Age: {age}, Height: {height}")
-            raise HTTPException(status_code=400, detail="Outlier input detected")
+        # Gender validation
+        if gender not in ["male", "female"]:
+            raise HTTPException(status_code=400, detail="Invalid gender")
 
         # Encode gender
-        gender_male = 1 if gender.lower() == "male" else 0
-        gender_female = 1 if gender.lower() == "female" else 0
+        gender_male = int(gender == "male")
+        gender_female = int(gender == "female")
 
+        # Validate height
+        height = height_raw * 30.48  # Convert from feet to cm
+        if not 30 <= height <= 150:
+            raise ValueError("Height out of valid range")
+
+        # Validate DOB
+        if not dob:
+            raise HTTPException(status_code=400, detail="Missing DOB")
+
+        # Verify model integrity
+        model_path = "lib/Model/random_forest_model.pkl"
+        expected_model_hash = os.getenv("EXPECTED_MODEL_HASH")
+        if not verify_model_integrity(model_path, expected_model_hash):
+            raise HTTPException(status_code=500, detail="Model integrity check failed")
+
+        # Create input DataFrame
         df = pd.DataFrame({
             "Age (months)": [age],
             "Height (cm)": [height],
@@ -152,23 +189,21 @@ async def detect_growth(child_id: str, request: Request):
             "Gender_male": [gender_male]
         })
 
-        # === Optional: Model Integrity Check ===
-        model_path = os.path.join(root_dir, 'lib', 'Model', 'random_forest_model.pkl')
-        expected_hash = "PUT_YOUR_MODEL_HASH_HERE"
-        actual_hash = hashlib.sha256(open(model_path, 'rb').read()).hexdigest()
-        if actual_hash != expected_hash:
-            logger.error(f"Model integrity check failed from {request.client.host}")
-            raise HTTPException(status_code=500, detail="Model integrity verification failed")
+        # Load model and label encoder
+        with open(model_path, "rb") as f:
+            model = pickle.load(f)
 
-        # Load model and encoder
-        with open(model_path, "rb") as file:
-            loaded_model = pickle.load(file)
-        with open(os.path.join(root_dir, 'lib', 'Model', 'label_encoder.pkl'), "rb") as file:
+        label_encoder_path = "lib/Model/label_encoder.pkl"
+        with open(label_encoder_path, "rb") as file:
             loaded_label_encoder = pickle.load(file)
 
-        prediction = loaded_model.predict(df)
+        # Perform prediction
+        prediction = model.predict(df)
         nutrition_status = loaded_label_encoder.inverse_transform(prediction)[0]
 
+        logger.info(f"Prediction successful for child {name}: {prediction}")
+
+        # Construct response
         response_data = {
             "data": {
                 "child_id": str(child_data["_id"]),
@@ -177,16 +212,19 @@ async def detect_growth(child_id: str, request: Request):
                 "height": height,
                 "gender": gender,
                 "nutrition_status": nutrition_status,
-            }
+            },
+            "message": "Prediction successful"
         }
 
-        logger.info(f"[{request.client.host}] Prediction success for {name}, Age: {age}, Height: {height}")
         return JSONResponse(response_data, status_code=200)
 
-    except Exception as e:
-        logger.exception(f"Error during growth detection for child_id={child_id}")
-        raise HTTPException(status_code=500, detail="Internal Server Error")
+    except HTTPException as http_err:
+        logger.error(f"HTTP error during detection: {http_err.detail}")
+        raise http_err
 
+    except Exception as e:
+        logger.error(f"Unhandled error during detection: {e}")
+        raise HTTPException(status_code=500, detail="Internal Server Error")
 
 @router.get("/growth/getGrowthData/{child_id}")
 async def get_growth_data(child_id: str):

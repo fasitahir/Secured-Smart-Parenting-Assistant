@@ -5,7 +5,8 @@ from pymongo import MongoClient
 from datetime import datetime, timedelta
 import random, bcrypt
 from lib.email_utils import send_otp_email
-
+from lib.jwt_utils import create_access_token
+from fastapi.responses import JSONResponse
 
 client = MongoClient("mongodb://localhost:27017/")
 db = client.smart_parenting
@@ -71,7 +72,6 @@ async def signup_verify(verify: OTPVerification):
     return {"message": "Signup successful"}
 
 # ------------------ LOGIN ------------------
-from fastapi.responses import JSONResponse
 
 @router.post("/login")
 async def login_request(user: User):
@@ -101,11 +101,19 @@ async def login_request(user: User):
 @router.post("/verify-otp")
 async def login_verify(verify: OTPVerification):
     record = otp_collection.find_one({"email": verify.email})
-    if not record or record["otp"] != verify.otp: 
+    if not record or record["otp"] != verify.otp:
         raise HTTPException(status_code=400, detail="Invalid OTP")
     if datetime.utcnow() > record["expires_at"]:
         raise HTTPException(status_code=400, detail="OTP expired")
-    
+
     otp_collection.delete_many({"email": verify.email})
     user = users_collection.find_one({"email": verify.email})
-    return {"message": "Login successful", "user_id": str(user["_id"])}
+    
+    # Create JWT token
+    token = create_access_token({"email": user["email"]})
+    print(token)
+    return {
+        "message": "Login successful",
+        "user_id": str(user["_id"]),
+        "access_token": token
+    }

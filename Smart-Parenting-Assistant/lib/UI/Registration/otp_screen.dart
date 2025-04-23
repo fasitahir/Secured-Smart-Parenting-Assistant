@@ -99,12 +99,15 @@ class _OtpScreenState extends State<OtpScreen> {
         "otp": _otpController.text.trim(),
       }),
     );
-
     setState(() => _isVerifying = false);
 
     if (response.statusCode == 200) {
+      final responseData = json.decode(response.body);
+      String token = responseData['access_token']; // Extract JWT
+
       SharedPreferences prefs = await SharedPreferences.getInstance();
       await prefs.setBool("isLoggedIn", true);
+      await prefs.setString("accessToken", token); //  Save token
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("OTP verified successfully!")),
