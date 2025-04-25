@@ -57,7 +57,7 @@ git clone https://github.com/fasitahir/Smart-Parenting-Assistant
 3. Start the ⚡ FastAPI server using the command:
 
 ```bash
-uvicorn lib.DL.server:app --host 0.0.0.0 --port 8000 --ssl-keyfile=lib/DL/certs/key.pem --ssl-certfile=lib/DL/certs/cert.pem
+uvicorn lib.DL.server:app --host 0.0.0.0 --port 8000 --ssl-keyfile=lib/DL/certs/key.pem --ssl-certfile=lib/DL/certs/cert.pem --reload
 ```
 
 ### 📱 Step 3: Set Up the Frontend

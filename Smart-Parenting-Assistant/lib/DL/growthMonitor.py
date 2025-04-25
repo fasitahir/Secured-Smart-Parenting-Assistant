@@ -30,6 +30,16 @@ from lib.rate_limiter import rate_limiter
 # Define the root directory of the project
 root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+# Set up logging configuration
+logging.basicConfig(
+    level=logging.INFO,  # Minimum level to capture
+    format="%(asctime)s - %(levelname)s - %(message)s",  # Format for the logs
+    handlers=[
+        logging.FileHandler("growth_detection_log.txt"),  # Save logs to this file
+        logging.StreamHandler()  # Also log to console
+    ]
+)
+
 # Add this logger setup at the top of your file
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
