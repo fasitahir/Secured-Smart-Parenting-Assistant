@@ -28,6 +28,8 @@ pip install python-dotenv
 pip install pymongo
 pip install bcrypt
 pip install google-generativeai
+pip install pycryptodome
+pip install python-jose[cryptography]
 ```
 
 ### 🐦 Flutter Dependencies

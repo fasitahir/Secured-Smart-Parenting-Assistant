@@ -1,0 +1,6 @@
+2025-05-04 02:28:07,795 - INFO - Prediction successful for child Ibrahim: [0]
+2025-05-04 02:29:02,002 - INFO - Prediction successful for child Ibrahim: [3]
+2025-05-04 02:29:37,840 - INFO - Prediction successful for child Ibrahim: [3]
+2025-05-04 02:30:01,024 - ERROR - Unhandled error during detection: Height out of valid range
+2025-05-04 02:34:45,143 - ERROR - Unhandled error during detection: Height out of valid range
+2025-05-04 02:41:51,780 - ERROR - Unhandled error during detection: Height out of valid range

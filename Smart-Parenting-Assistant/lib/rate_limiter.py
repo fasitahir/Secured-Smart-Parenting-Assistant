@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 # In-memory store for request timestamps (replace with Redis for scale)
 rate_limit_cache = {}
 
-MAX_REQUESTS = 10
+MAX_REQUESTS = 2
 WINDOW_SECONDS = 60  # Time window
 
 def rate_limiter(request: Request):
