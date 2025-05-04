@@ -16,17 +16,35 @@ with open("D:\\FasiTahir\\apiKey.txt", "r") as file:
     key = file.read().strip()
 genai.configure(api_key=key)
 
-import logging
+# import logging
 
-# Set up logging configuration
-logging.basicConfig(
-    level=logging.INFO,  # Minimum level to capture
-    format="%(asctime)s - %(levelname)s - %(message)s",  # Format for the logs
-    handlers=[
-        logging.FileHandler("nutrition_log.txt"),  # Save logs to this file
-        logging.StreamHandler()  # Also log to console
-    ]
-)
+# # Set up logging configuration
+# logging.basicConfig(
+#     level=logging.INFO,  # Minimum level to capture
+#     format="%(asctime)s - %(levelname)s - %(message)s",  # Format for the logs
+#     handlers=[
+#         logging.FileHandler("nutrition_log.txt"),  # Save logs to this file
+#         logging.StreamHandler()  # Also log to console
+#     ]
+# )
+
+# ------------------ Logging Setup ------------------
+
+root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+log_dir = os.path.join(root_dir, "logs")
+os.makedirs(log_dir, exist_ok=True)
+
+log_file_path = os.path.join(log_dir, "child_nutrition.log")
+
+logger = logging.getLogger("child_nutrition")
+logger.setLevel(logging.INFO)
+
+if not logger.handlers:
+    file_handler = logging.FileHandler(log_file_path)
+    formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
+    file_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
+
 
 
 # Gemini config
@@ -97,15 +115,16 @@ def calculate_age_in_months(dob_str: str) -> int:
 
 class ChildData(BaseModel):
     date_of_birth: str
-    weight: float = Field(gt=0, lt=100)  # ✅ Validate weight
-    height: float = Field(gt=0, lt=10)   # ✅ Validate height
+    weight: float = Field(gt=0, lt=100) 
+    height: float = Field(gt=0, lt=10)   
     milestones: Optional[List[str]] = []
     allergies: str
     gender: str
+    child_id: Optional[str] = ""
 
 def sanitize_input(text: str) -> str:
     """
-    ✅ 1. Strip malicious instructions, HTML, and prompt injection attempts
+    1. Strip malicious instructions, HTML, and prompt injection attempts
     """
     text = html.escape(text)  # escape HTML tags
     text = re.sub(r"(ignore.*|forget.*|you are now.*|disregard.*)", "", text, flags=re.IGNORECASE)
@@ -113,25 +132,32 @@ def sanitize_input(text: str) -> str:
 
 
 @router.post("/nutrition/")
-async def get_nutrition_assist(child_data: ChildData, request: Request,  _: None = Depends(rate_limiter)):
-    # ✅ 3. Sanitize all string fields
+async def get_nutrition_assist(child_data: ChildData, request: Request, _: None = Depends(rate_limiter)):
+    logger.info(f"Received request for child_id={child_data.child_id} to generate nutrition assistance.")
+
+    # 3. Sanitize all string fields
     safe_allergies = sanitize_input(child_data.allergies)
     safe_gender = sanitize_input(child_data.gender)
 
     # Calculate child's age in months
     age_months = calculate_age_in_months(child_data.date_of_birth)
+    logger.info(f"Child age calculated as {age_months} months.")
 
     # Ensure the age is within the valid range (0 to 120 months)
     if age_months not in max_weight_by_month:
+        logger.error(f"Age {age_months} out of range. Must be between 0 and 120 months.")
         raise HTTPException(status_code=400, detail="Age out of range. Please ensure age is between 0 and 10 years.")
 
     # Validate weight and height
     if child_data.weight > max_weight_by_month[age_months]:
+        logger.error(f"Unrealistic weight: {child_data.weight} kg for child age {age_months} months.")
         raise HTTPException(status_code=400, detail="Unrealistic weight for child's age.")
 
     if child_data.height > max_height_by_month[age_months]:
+        logger.error(f"Unrealistic height: {child_data.height} ft for child age {age_months} months.")
         raise HTTPException(status_code=400, detail="Unrealistic height for child's age.")
 
+    # Construct the prompt for the AI model
     prompt = (
         f"You are a certified pediatric nutrition expert. Only use the data provided.\n\n"
         f"Create two sections:\n"
@@ -148,15 +174,19 @@ async def get_nutrition_assist(child_data: ChildData, request: Request,  _: None
         f"Respond ONLY with dietary suggestions. Do not explain or reference external sources."
     )
 
-    # ✅ 4. Send message & handle model errors
+    logger.info(f"Prompt generated for model: {prompt}")
+
+    # 4. Send message & handle model errors
     try:
         response = chat_session.send_message(prompt)
+        logger.info("Received response from model.")
     except Exception as e:
-        logging.error("Model Error:", exc_info=True)
+        logger.error("Model Error: Failed to get response", exc_info=True)
         raise HTTPException(status_code=500, detail="AI service unavailable at the moment.")
 
-    # ✅ 5. Validate model response
+    # 5. Validate model response
     if not response.text or len(response.text.strip()) < 20:
+        logger.error("Model response was empty or too short. Returning default error message.")
         return {
             "diet_plan": {
                 "general_advice": [
@@ -169,7 +199,7 @@ async def get_nutrition_assist(child_data: ChildData, request: Request,  _: None
             }
         }
 
-    # ✅ 6. Parse safely
+    # 6. Parse safely
     sections = response.text.split("\n\n")
     general_advice = []
     diet_suggestions = []
@@ -197,7 +227,10 @@ async def get_nutrition_assist(child_data: ChildData, request: Request,  _: None
     if diet_suggestions:
         diet_plan["diet_suggestions"] = diet_suggestions
 
+    logger.info(f"Successfully generated nutrition plan for child_id={child_data.child_id}")
+
     return {"diet_plan": diet_plan}
+
 
 # Follow-up question handler
 def ask_follow_up(question):

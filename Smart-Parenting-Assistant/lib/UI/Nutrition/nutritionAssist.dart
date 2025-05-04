@@ -76,6 +76,7 @@ class _NutritionAssistPageState extends State<NutritionAssistPage> {
           "Content-Type": "application/json"
         },
         body: jsonEncode({
+          "_id": selectedChild['id'],
           "date_of_birth": selectedChild['date_of_birth'],
           "weight": selectedChild['weight'],
           "height": selectedChild['height'],
